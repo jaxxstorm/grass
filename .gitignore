@@ -1,0 +1,5 @@
+*.db
+.env
+**/.terraform.lock.hcl
+**/.terraform
+**/terraform.tfstate*
