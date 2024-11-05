@@ -20,7 +20,6 @@ type DynamoDBStorer struct {
 func NewDynamoDBStorer(dbName string) (*DynamoDBStorer, error) {
 	ctx := context.TODO()
 
-
 	// Load AWS config with detailed logging
 	cfg, err := config.LoadDefaultConfig(ctx)
 

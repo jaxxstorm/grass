@@ -47,12 +47,12 @@ func (d *DiscordNotifier) Notify(result search.SearchResult) error {
 	// Format the message using markdown
 	message := fmt.Sprintf(
 		"**%s**\n*Platform*: %s\n*Keyword*: %s\n*Posted*: %s\n%s\n%s",
-		result.Title,             // Bold title
-		result.Platform,          // Platform name
-		result.Keyword,           // Keyword
-		timestamp,                // Human-readable timestamp
-		result.Content,           // Content of the post
-		result.URL,               // URL (should unfurl automatically)
+		result.Title,    // Bold title
+		result.Platform, // Platform name
+		result.Keyword,  // Keyword
+		timestamp,       // Human-readable timestamp
+		result.Content,  // Content of the post
+		result.URL,      // URL (should unfurl automatically)
 	)
 
 	// Send the markdown-formatted message

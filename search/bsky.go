@@ -103,8 +103,8 @@ func (b *BlueskySearcher) Search(keyword string, afterEpochSecs int64) ([]Search
 	// Parse the response from Bluesky
 	var data struct {
 		Posts []struct {
-			Uri     string `json:"uri"`
-			Author  struct {
+			Uri    string `json:"uri"`
+			Author struct {
 				DisplayName string `json:"displayName"`
 			} `json:"author"`
 			Record struct {
