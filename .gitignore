@@ -3,3 +3,4 @@
 **/.terraform.lock.hcl
 **/.terraform
 **/terraform.tfstate*
+dist/
