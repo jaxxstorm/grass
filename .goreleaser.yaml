@@ -8,9 +8,14 @@ builds:
   - env:
       - CGO_ENABLED=0
     goos:
-      - linux
-      - windows
       - darwin
+      - windows
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-X main.Version={{.Version}}"
 
 archives:
   - format: tar.gz
