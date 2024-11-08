@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"github.com/charmbracelet/log"
 	"net/http"
 	"os"
 	"strings"
