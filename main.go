@@ -1,8 +1,8 @@
 package main
 
 import (
-	"log"
 	"fmt"
+	"github.com/charmbracelet/log"
 	"os"
 
 	"github.com/alecthomas/kingpin/v2"
@@ -13,20 +13,20 @@ import (
 )
 
 var (
-	Version  = "dev"
-	dbType    = kingpin.Flag("db", "Specify the database type to use: dynamodb or sqlite").Default("sqlite").Enum("dynamodb", "sqlite")
-	keywords  = kingpin.Flag("keyword", "Specify keywords to search for").Strings()
-	botTypes  = kingpin.Flag("bot", "Specify bot types to use: print, discord").Strings()
-	searchers = kingpin.Flag("searchers", "Specify searchers to use: hackernews, reddit, bluesky").Strings()
-	tableName = kingpin.Flag("table-name", "Specify the table name to use for SQLite storage").Envar("SOCIAL_SEARCH_TABLE_NAME").Default("grass").String()
-	showVersion   = kingpin.Flag("version", "Show the version and exit").Bool()
+	Version     = "dev"
+	dbType      = kingpin.Flag("db", "Specify the database type to use: dynamodb or sqlite").Default("sqlite").Enum("dynamodb", "sqlite")
+	keywords    = kingpin.Flag("keyword", "Specify keywords to search for").Strings()
+	botTypes    = kingpin.Flag("bot", "Specify bot types to use: print, discord").Strings()
+	searchers   = kingpin.Flag("searchers", "Specify searchers to use: hackernews, reddit, bluesky").Strings()
+	tableName   = kingpin.Flag("table-name", "Specify the table name to use for SQLite storage").Envar("SOCIAL_SEARCH_TABLE_NAME").Default("grass").String()
+	showVersion = kingpin.Flag("version", "Show the version and exit").Bool()
 )
 
 func init() {
 	// Load the .env file
 	err := godotenv.Load()
 	if err != nil {
-		log.Println("No .env file found or error reading it; make sure environment variables are set.")
+		log.Debug("No .env file found or error reading it; make sure environment variables are set.")
 	}
 }
 
@@ -56,6 +56,18 @@ func main() {
 				log.Fatalf("Failed to initialize Bluesky searcher: %v", err)
 			}
 			searchersList = append(searchersList, blueskySearcher)
+		case "fediverse":
+			fediverseSearcher, err := search.NewFediverseSearcher()
+			if err != nil {
+				log.Fatalf("Failed to initialize Fediverse searcher: %v", err)
+			}
+			searchersList = append(searchersList, fediverseSearcher)
+		case "youtube":
+			youtubeSearcher, err := search.NewYouTubeSearcher()
+			if err != nil {
+				log.Fatalf("Failed to initialize YouTube searcher: %v", err)
+			}
+			searchersList = append(searchersList, youtubeSearcher)
 		default:
 			log.Fatalf("Unknown searcher specified: %s", searcher)
 		}
@@ -93,6 +105,8 @@ func main() {
 			notifiers = append(notifiers, bot.NewPrintNotifier())
 		case "discord":
 			notifiers = append(notifiers, bot.NewDiscordNotifier())
+		case "slack":
+			notifiers = append(notifiers, bot.NewSlackNotifier())
 		default:
 			log.Fatalf("Unknown bot type: %s", botType)
 		}

@@ -1,12 +1,13 @@
+// bot/discord.go
 package bot
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/charmbracelet/log"
 	"github.com/jaxxstorm/grass/search"
 )
 
@@ -20,20 +21,20 @@ func NewDiscordNotifier() *DiscordNotifier {
 	channelID := os.Getenv("DISCORD_CHANNEL_ID")
 
 	if token == "" {
-		log.Fatal("DISCORD_BOT_TOKEN environment variable is not set")
+		log.Fatal("Environment variable not set", "variable", "DISCORD_BOT_TOKEN")
 	}
 	if channelID == "" {
-		log.Fatal("DISCORD_CHANNEL_ID environment variable is not set")
+		log.Fatal("Environment variable not set", "variable", "DISCORD_CHANNEL_ID")
 	}
 
 	session, err := discordgo.New("Bot " + token)
 	if err != nil {
-		log.Fatalf("Failed to create Discord session: %v", err)
+		log.Fatal("Failed to create Discord session", "error", err)
 	}
 
 	err = session.Open()
 	if err != nil {
-		log.Fatalf("Error opening connection to Discord: %v", err)
+		log.Fatal("Error opening connection to Discord", "error", err)
 	}
 
 	return &DiscordNotifier{session: session, channelID: channelID}
@@ -58,10 +59,10 @@ func (d *DiscordNotifier) Notify(result search.SearchResult) error {
 	// Send the markdown-formatted message
 	_, err := d.session.ChannelMessageSend(d.channelID, message)
 	if err != nil {
-		log.Printf("Failed to send message to Discord: %v", err)
+		log.Error("Failed to send message to Discord", "title", result.Title, "url", result.URL, "error", err)
 		return err
 	}
 
-	log.Printf("Posted to Discord: %s - %s\n", result.Title, result.URL)
+	log.Info("Posted to Discord", "title", result.Title, "url", result.URL)
 	return nil
 }

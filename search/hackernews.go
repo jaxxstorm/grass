@@ -4,7 +4,7 @@ package search
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"github.com/charmbracelet/log"
 	"net/http"
 	"time"
 )
