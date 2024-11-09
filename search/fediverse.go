@@ -1,14 +1,18 @@
+// search/fediverse.go
 package search
 
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/charmbracelet/log"
+	"html"
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
+
+	"github.com/charmbracelet/log"
 )
 
 // FediverseSearcher is a searcher for posts on multiple Mastodon instances with OAuth2 support.
@@ -43,25 +47,23 @@ func (f *FediverseSearcher) Platform() string {
 	return "Fediverse"
 }
 
-// getEnvVarForInstance builds environment variable names based on the instance URL.
-func getEnvVarForInstance(instanceURL, suffix string) string {
-	// Convert the instance URL to a standardized format (e.g., hachyderm_io)
-	sanitizedInstance := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(instanceURL, "https://", ""), ".", "_"))
-	return fmt.Sprintf("%s_%s", sanitizedInstance, suffix)
-}
-
 // getAccessTokenForInstance authenticates with the instance and retrieves an access token.
 func getAccessTokenForInstance(instanceURL string) (string, error) {
-	// Dynamically get client ID, client secret, and access token env vars based on instance URL
-	clientID := os.Getenv(getEnvVarForInstance(instanceURL, "CLIENT_ID"))
-	clientSecret := os.Getenv(getEnvVarForInstance(instanceURL, "CLIENT_SECRET"))
-	accessTokenEnv := os.Getenv(getEnvVarForInstance(instanceURL, "ACCESS_TOKEN"))
+	// Construct environment variable names dynamically based on the instance URL
+	instanceEnvPrefix := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(instanceURL, "https://", ""), ".", "_"))
+	clientID := os.Getenv(instanceEnvPrefix + "_CLIENT_ID")
+	clientSecret := os.Getenv(instanceEnvPrefix + "_CLIENT_SECRET")
+	accessToken := os.Getenv(instanceEnvPrefix + "_ACCESS_TOKEN")
 
-	if accessTokenEnv != "" {
-		return accessTokenEnv, nil
+	if accessToken != "" {
+		return accessToken, nil
 	}
 
-	// Obtain token via OAuth
+	if clientID == "" || clientSecret == "" {
+		return "", fmt.Errorf("missing client ID or client secret for instance %s", instanceURL)
+	}
+
+	// Authenticate with the instance to obtain a new access token
 	data := url.Values{}
 	data.Set("client_id", clientID)
 	data.Set("client_secret", clientSecret)
@@ -76,7 +78,7 @@ func getAccessTokenForInstance(instanceURL string) (string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to authenticate, status code: %d", resp.StatusCode)
+		return "", fmt.Errorf("failed to authenticate with status code: %d", resp.StatusCode)
 	}
 
 	var result struct {
@@ -89,6 +91,16 @@ func getAccessTokenForInstance(instanceURL string) (string, error) {
 	return result.AccessToken, nil
 }
 
+// cleanHTMLContent removes HTML tags and decodes HTML entities in the content
+func cleanHTMLContent(content string) string {
+	// Remove HTML tags
+	re := regexp.MustCompile(`<.*?>`)
+	content = re.ReplaceAllString(content, "")
+
+	// Decode HTML entities
+	return html.UnescapeString(content)
+}
+
 // Search performs a search for posts matching `@tailscale` or `#tailscale` on each specified instance.
 func (f *FediverseSearcher) Search(keyword string, afterEpochSecs int64) ([]SearchResult, error) {
 	var allResults []SearchResult
@@ -99,7 +111,7 @@ func (f *FediverseSearcher) Search(keyword string, afterEpochSecs int64) ([]Sear
 		// Create a new request with Authorization header
 		req, err := http.NewRequest("GET", searchURL, nil)
 		if err != nil {
-			log.Printf("failed to create search request for instance %s: %v", instanceURL, err)
+			log.Printf("Failed to create search request for instance %s: %v", instanceURL, err)
 			continue
 		}
 		req.Header.Set("Authorization", "Bearer "+accessToken)
@@ -108,13 +120,13 @@ func (f *FediverseSearcher) Search(keyword string, afterEpochSecs int64) ([]Sear
 		client := &http.Client{}
 		resp, err := client.Do(req)
 		if err != nil {
-			log.Printf("failed to perform search request on instance %s: %v", instanceURL, err)
+			log.Printf("Failed to perform search request on instance %s: %v", instanceURL, err)
 			continue
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			log.Printf("search request failed on instance %s with status code: %d", instanceURL, resp.StatusCode)
+			log.Printf("Search request failed on instance %s with status code: %d", instanceURL, resp.StatusCode)
 			continue
 		}
 
@@ -131,12 +143,13 @@ func (f *FediverseSearcher) Search(keyword string, afterEpochSecs int64) ([]Sear
 			} `json:"statuses"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-			log.Printf("failed to parse search results from instance %s: %v", instanceURL, err)
+			log.Printf("Failed to parse search results from instance %s: %v", instanceURL, err)
 			continue
 		}
 
 		// Filter and format results
 		for _, status := range data.Statuses {
+			// Only include results after the specified epoch time
 			createdTime, err := time.Parse(time.RFC3339, status.CreatedAt)
 			if err != nil {
 				log.Printf("Skipping post with invalid CreatedAt format on instance %s: %v", instanceURL, status.CreatedAt)
@@ -146,17 +159,17 @@ func (f *FediverseSearcher) Search(keyword string, afterEpochSecs int64) ([]Sear
 				continue
 			}
 
-			// Check for @tailscale or #tailscale mentions in the content
-			if strings.Contains(status.Content, "@tailscale") || strings.Contains(status.Content, "#tailscale") {
-				allResults = append(allResults, SearchResult{
-					Platform:  f.Platform(),
-					Keyword:   keyword,
-					Title:     fmt.Sprintf("Post by %s (@%s)", status.Account.DisplayName, status.Account.Acct),
-					URL:       status.URL,
-					Timestamp: createdTime.Unix(),
-					Content:   status.Content,
-				})
-			}
+			// Clean the content before creating the SearchResult
+			cleanedContent := cleanHTMLContent(status.Content)
+
+			allResults = append(allResults, SearchResult{
+				Platform:  f.Platform(),
+				Keyword:   keyword,
+				Title:     fmt.Sprintf("Post by %s (@%s)", status.Account.DisplayName, status.Account.Acct),
+				URL:       status.URL,
+				Timestamp: createdTime.Unix(),
+				Content:   cleanedContent,
+			})
 		}
 	}
 
