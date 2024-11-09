@@ -96,8 +96,23 @@ func (b *BlueskySearcher) Search(keyword string, afterEpochSecs int64) ([]Search
 	}
 	defer resp.Body.Close()
 
+	// Handle rate limiting
+	if resp.StatusCode == http.StatusTooManyRequests {
+		retryAfter := resp.Header.Get("Retry-After")
+		log.Warn("rate limit exceeded",
+			"platform", b.Platform(),
+			"keyword", keyword,
+			"retry_after", retryAfter)
+		return []SearchResult{}, nil // Return empty results instead of error
+	}
+
+	// Handle other non-200 status codes
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("search request failed with status code: %d, response: %v", resp.StatusCode, resp)
+		log.Warn("search request failed",
+			"platform", b.Platform(),
+			"keyword", keyword,
+			"status_code", resp.StatusCode)
+		return []SearchResult{}, nil // Return empty results instead of error
 	}
 
 	// Parse the response from Bluesky
@@ -114,7 +129,11 @@ func (b *BlueskySearcher) Search(keyword string, afterEpochSecs int64) ([]Search
 		} `json:"posts"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return nil, fmt.Errorf("failed to parse search results: %w", err)
+		log.Warn("failed to parse search results",
+			"platform", b.Platform(),
+			"keyword", keyword,
+			"error", err)
+		return []SearchResult{}, nil // Return empty results instead of error
 	}
 
 	// Convert results to the SearchResult format
@@ -122,14 +141,19 @@ func (b *BlueskySearcher) Search(keyword string, afterEpochSecs int64) ([]Search
 	for _, post := range data.Posts {
 		// Skip if Record.CreatedAt is empty
 		if post.Record.CreatedAt == "" {
-			log.Printf("Skipping post with missing Record.CreatedAt field: %s", post.Uri)
+			log.Warn("skipping post with missing created_at",
+				"platform", b.Platform(),
+				"uri", post.Uri)
 			continue
 		}
 
 		// Parse the created time from the Record.CreatedAt field
 		createdTime, err := time.Parse(time.RFC3339, post.Record.CreatedAt)
 		if err != nil {
-			log.Printf("Skipping post with invalid Record.CreatedAt format: %s", post.Record.CreatedAt)
+			log.Warn("skipping post with invalid date format",
+				"platform", b.Platform(),
+				"created_at", post.Record.CreatedAt,
+				"error", err)
 			continue
 		}
 
@@ -139,7 +163,7 @@ func (b *BlueskySearcher) Search(keyword string, afterEpochSecs int64) ([]Search
 				Platform:  b.Platform(),
 				Keyword:   keyword,
 				Title:     fmt.Sprintf("Post by %s", post.Author.DisplayName),
-				URL:       convertAtURLToHTTPS(post.Uri), // Convert URL to clickable format
+				URL:       convertAtURLToHTTPS(post.Uri),
 				Timestamp: createdTime.Unix(),
 			})
 		}
