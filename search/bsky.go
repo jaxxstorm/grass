@@ -1,4 +1,3 @@
-// search/bluesky.go
 package search
 
 import (
@@ -27,9 +26,32 @@ func NewBlueskySearcher() (*BlueskySearcher, error) {
 	}
 
 	searcher := &BlueskySearcher{}
-	if err := searcher.authenticate(username, password); err != nil {
+	
+	// Try authentication with retries
+	maxRetries := 3
+	for i := 0; i < maxRetries; i++ {
+		err := searcher.authenticate(username, password)
+		if err == nil {
+			return searcher, nil
+		}
+
+		// Check if it's a rate limit error
+		if strings.Contains(err.Error(), "status code: 429") {
+			retryDelay := time.Duration(5*(i+1)) * time.Second // Exponential backoff
+			log.Warn("authentication rate limited, retrying...",
+				"attempt", i+1,
+				"max_attempts", maxRetries,
+				"retry_delay", retryDelay)
+			time.Sleep(retryDelay)
+			continue
+		}
+
+		// If it's not a rate limit error, return the error immediately
 		return nil, fmt.Errorf("failed to authenticate with Bluesky: %w", err)
 	}
+
+	// If we've exhausted all retries
+	log.Warn("could not authenticate due to rate limits, continuing with empty searcher")
 	return searcher, nil
 }
 
@@ -47,6 +69,10 @@ func (b *BlueskySearcher) authenticate(username, password string) error {
 		return err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return fmt.Errorf("status code: 429")
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("authentication failed with status code: %d", resp.StatusCode)
@@ -82,6 +108,14 @@ func convertAtURLToHTTPS(atURL string) string {
 
 // Search queries Bluesky for posts matching a keyword.
 func (b *BlueskySearcher) Search(keyword string, afterEpochSecs int64) ([]SearchResult, error) {
+	// If we don't have an access token, return empty results
+	if b.accessToken == "" {
+		log.Warn("search attempted without valid authentication",
+			"platform", "Bluesky",
+			"keyword", keyword)
+		return []SearchResult{}, nil
+	}
+
 	url := fmt.Sprintf("https://bsky.social/xrpc/app.bsky.feed.searchPosts?q=%s", keyword)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -99,23 +133,21 @@ func (b *BlueskySearcher) Search(keyword string, afterEpochSecs int64) ([]Search
 	// Handle rate limiting
 	if resp.StatusCode == http.StatusTooManyRequests {
 		retryAfter := resp.Header.Get("Retry-After")
-		log.Warn("rate limit exceeded",
+		log.Warn("rate limit exceeded", 
 			"platform", b.Platform(),
 			"keyword", keyword,
 			"retry_after", retryAfter)
-		return []SearchResult{}, nil // Return empty results instead of error
+		return []SearchResult{}, nil
 	}
 
-	// Handle other non-200 status codes
 	if resp.StatusCode != http.StatusOK {
 		log.Warn("search request failed",
 			"platform", b.Platform(),
 			"keyword", keyword,
 			"status_code", resp.StatusCode)
-		return []SearchResult{}, nil // Return empty results instead of error
+		return []SearchResult{}, nil
 	}
 
-	// Parse the response from Bluesky
 	var data struct {
 		Posts []struct {
 			Uri    string `json:"uri"`
@@ -123,7 +155,7 @@ func (b *BlueskySearcher) Search(keyword string, afterEpochSecs int64) ([]Search
 				DisplayName string `json:"displayName"`
 			} `json:"author"`
 			Record struct {
-				CreatedAt string `json:"createdAt"` // Timestamp is nested in the "record" field
+				CreatedAt string `json:"createdAt"`
 				Text      string `json:"text"`
 			} `json:"record"`
 		} `json:"posts"`
@@ -133,13 +165,11 @@ func (b *BlueskySearcher) Search(keyword string, afterEpochSecs int64) ([]Search
 			"platform", b.Platform(),
 			"keyword", keyword,
 			"error", err)
-		return []SearchResult{}, nil // Return empty results instead of error
+		return []SearchResult{}, nil
 	}
 
-	// Convert results to the SearchResult format
 	var results []SearchResult
 	for _, post := range data.Posts {
-		// Skip if Record.CreatedAt is empty
 		if post.Record.CreatedAt == "" {
 			log.Warn("skipping post with missing created_at",
 				"platform", b.Platform(),
@@ -147,7 +177,6 @@ func (b *BlueskySearcher) Search(keyword string, afterEpochSecs int64) ([]Search
 			continue
 		}
 
-		// Parse the created time from the Record.CreatedAt field
 		createdTime, err := time.Parse(time.RFC3339, post.Record.CreatedAt)
 		if err != nil {
 			log.Warn("skipping post with invalid date format",
@@ -157,7 +186,6 @@ func (b *BlueskySearcher) Search(keyword string, afterEpochSecs int64) ([]Search
 			continue
 		}
 
-		// Filter by the specified epoch time
 		if createdTime.Unix() > afterEpochSecs {
 			results = append(results, SearchResult{
 				Platform:  b.Platform(),
