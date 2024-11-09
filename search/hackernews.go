@@ -1,4 +1,3 @@
-// search/hackernews.go
 package search
 
 import (
@@ -6,6 +5,7 @@ import (
 	"fmt"
 	"github.com/charmbracelet/log"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -38,9 +38,13 @@ func (h *HackerNewsSearcher) Search(keyword string, afterEpochSecs int64) ([]Sea
 
 	var result struct {
 		Hits []struct {
-			Title    string `json:"title"`
-			URL      string `json:"url"`
-			ObjectID string `json:"objectID"`
+			Title       string `json:"title"`
+			URL         string `json:"url"`
+			ObjectID    string `json:"objectID"`
+			CreatedAt   int64  `json:"created_at_i"`
+			CommentText string `json:"comment_text"`
+			StoryTitle  string `json:"story_title"`
+			Type        string `json:"_tags"` // Changed to string
 		} `json:"hits"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
@@ -50,18 +54,40 @@ func (h *HackerNewsSearcher) Search(keyword string, afterEpochSecs int64) ([]Sea
 	var results []SearchResult
 	timestamp := time.Now().Unix()
 	for _, hit := range result.Hits {
-		if hit.Title == "" || hit.ObjectID == "" {
-			log.Printf("Skipping hit due to missing title or objectID")
+		if hit.ObjectID == "" {
+			log.Debug("Skipping hit due to missing objectID")
 			continue
 		}
 
-		// Use the Hacker News post URL rather than the external URL
+		// Build the HN URL
 		hackerNewsURL := fmt.Sprintf("https://news.ycombinator.com/item?id=%s", hit.ObjectID)
+
+		// Check if this is a comment
+		isComment := strings.Contains(hit.Type, "comment")
+
+		title := hit.Title
+		content := ""
+
+		if isComment {
+			// For comments, use the story title and comment text
+			if hit.StoryTitle != "" {
+				title = fmt.Sprintf("Comment on: %s", hit.StoryTitle)
+			}
+			content = hit.CommentText
+		}
+
+		// Skip if we couldn't determine a title
+		if title == "" {
+			log.Debug("Skipping hit due to missing title", "objectID", hit.ObjectID)
+			continue
+		}
+
 		results = append(results, SearchResult{
 			Platform:  h.Platform(),
 			Keyword:   keyword,
-			Title:     hit.Title,
+			Title:     title,
 			URL:       hackerNewsURL,
+			Content:   content,
 			Timestamp: timestamp,
 		})
 	}
