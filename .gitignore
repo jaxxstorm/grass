@@ -4,3 +4,5 @@
 **/.terraform
 **/terraform.tfstate*
 dist/
+.aws-sam/
+.build/

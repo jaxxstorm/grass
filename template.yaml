@@ -1,0 +1,96 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Scheduled native AWS Lambda deployment for Grass.
+
+Parameters:
+  GrassKeywords:
+    Type: String
+    Description: Comma-separated keywords to search for.
+  GrassSearchers:
+    Type: String
+    Description: Comma-separated searchers to run.
+  GrassBots:
+    Type: String
+    Description: Comma-separated notifiers to run.
+  ScheduleExpression:
+    Type: String
+    Default: rate(1 hour)
+    Description: EventBridge schedule expression. Choose an interval compatible with provider API limits.
+  FunctionTimeout:
+    Type: Number
+    Default: 300
+    MinValue: 1
+    MaxValue: 900
+    Description: Lambda timeout in seconds.
+  LogRetentionDays:
+    Type: Number
+    Default: 30
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653]
+    Description: Number of days to retain Lambda logs.
+
+Resources:
+  GrassStateTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: Platform
+          AttributeType: S
+        - AttributeName: SortKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: Platform
+          KeyType: HASH
+        - AttributeName: SortKey
+          KeyType: RANGE
+
+  GrassFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: bootstrap
+      Runtime: provided.al2023
+      PackageType: Zip
+      Architectures: [arm64]
+      MemorySize: 256
+      Timeout: !Ref FunctionTimeout
+      ReservedConcurrentExecutions: 1
+      Environment:
+        Variables:
+          GRASS_KEYWORDS: !Ref GrassKeywords
+          GRASS_SEARCHERS: !Ref GrassSearchers
+          GRASS_BOTS: !Ref GrassBots
+          SOCIAL_SEARCH_TABLE_NAME: !Ref GrassStateTable
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+              Resource: !GetAtt GrassStateTable.Arn
+      Events:
+        ScheduledRun:
+          Type: Schedule
+          Properties:
+            Schedule: !Ref ScheduleExpression
+            Enabled: true
+    Metadata:
+      BuildMethod: makefile
+
+  GrassLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${GrassFunction}
+      RetentionInDays: !Ref LogRetentionDays
+
+Outputs:
+  FunctionName:
+    Description: Name of the scheduled Grass Lambda function.
+    Value: !Ref GrassFunction
+  StateTableName:
+    Description: DynamoDB table that stores result and search-cursor state.
+    Value: !Ref GrassStateTable

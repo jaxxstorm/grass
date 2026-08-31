@@ -2,13 +2,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/charmbracelet/log"
 	"os"
 
 	"github.com/alecthomas/kingpin/v2"
-	"github.com/jaxxstorm/grass/bot"
-	"github.com/jaxxstorm/grass/search"
-	"github.com/jaxxstorm/grass/storage"
+	"github.com/charmbracelet/log"
+	"github.com/jaxxstorm/grass/app"
 	"github.com/joho/godotenv"
 )
 
@@ -38,90 +36,13 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Initialize searchers
-	var searchersList []search.Searcher
-	for _, searcher := range *searchers {
-		switch searcher {
-		case "hackernews":
-			searchersList = append(searchersList, search.NewHackerNewsSearcher())
-		case "reddit":
-			redditSearcher, err := search.NewRedditSearcher()
-			if err != nil {
-				log.Fatalf("Failed to initialize Reddit searcher: %v", err)
-			}
-			searchersList = append(searchersList, redditSearcher)
-		case "bluesky":
-			blueskySearcher, err := search.NewBlueskySearcher()
-			if err != nil {
-				log.Fatalf("Failed to initialize Bluesky searcher: %v", err)
-			}
-			searchersList = append(searchersList, blueskySearcher)
-		case "fediverse":
-			fediverseSearcher, err := search.NewFediverseSearcher()
-			if err != nil {
-				log.Fatalf("Failed to initialize Fediverse searcher: %v", err)
-			}
-			searchersList = append(searchersList, fediverseSearcher)
-		case "youtube":
-			youtubeSearcher, err := search.NewYouTubeSearcher()
-			if err != nil {
-				log.Fatalf("Failed to initialize YouTube searcher: %v", err)
-			}
-			searchersList = append(searchersList, youtubeSearcher)
-		case "x":
-			xSearcher, err := search.NewXSearcher()
-			if err != nil {
-				log.Fatalf("Failed to initialize X searcher: %v", err)
-			}
-			searchersList = append(searchersList, xSearcher)
-		default:
-			log.Fatalf("Unknown searcher specified: %s", searcher)
-		}
-	}
-
-	// Initialize the storage backend
-	var storer storage.Storer
-	var err error
-
-	switch *dbType {
-	case "dynamodb":
-		storer, err = storage.NewDynamoDBStorer(*tableName)
-		if err != nil {
-			log.Fatalf("Failed to initialize DynamoDB storage: %v", err)
-		}
-	case "sqlite":
-		storer, err = storage.NewSQLiteStorer(*tableName)
-		if err != nil {
-			log.Fatalf("Failed to initialize SQLite storage: %v", err)
-		}
-		defer func() {
-			if err := storer.(*storage.SQLiteStorer).Close(); err != nil {
-				log.Printf("Failed to close SQLite storage: %v", err)
-			}
-		}()
-	default:
-		log.Fatalf("Unknown database type: %s", *dbType)
-	}
-
-	// Initialize notifiers
-	var notifiers []bot.Notifier
-	for _, botType := range *botTypes {
-		switch botType {
-		case "print":
-			notifiers = append(notifiers, bot.NewPrintNotifier())
-		case "discord":
-			notifiers = append(notifiers, bot.NewDiscordNotifier())
-		case "slack":
-			notifiers = append(notifiers, bot.NewSlackNotifier())
-		default:
-			log.Fatalf("Unknown bot type: %s", botType)
-		}
-	}
-
-	// Run the bot
-	b := bot.NewBot(searchersList, storer, notifiers)
-	for _, keyword := range *keywords {
-		log.Printf("Running search for keyword: %s", keyword)
-		b.Run(keyword)
+	if err := app.Run(app.Config{
+		Database:  *dbType,
+		TableName: *tableName,
+		Keywords:  *keywords,
+		Bots:      *botTypes,
+		Searchers: *searchers,
+	}); err != nil {
+		log.Fatalf("Failed to run Grass: %v", err)
 	}
 }

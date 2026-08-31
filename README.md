@@ -160,4 +160,84 @@ SOCIAL_SEARCH_TABLE_NAME=<Your DynamoDB Table Name>
 
 ---
 
+## Deploying To AWS Lambda
+
+Grass can run as a scheduled, native AWS Lambda function. This avoids reliance on GitHub Actions schedules and uses DynamoDB to retain duplicate-result and last-search-time state between invocations. Lambda cannot use SQLite because its filesystem is ephemeral.
+
+The deployment is a Linux ARM64 Go `bootstrap` ZIP for Lambda's `provided.al2023` runtime. It does not build or publish a Docker image.
+
+### Prerequisites
+
+- Go 1.26 or later and the `zip` command.
+- AWS SAM CLI and AWS credentials permitted to create CloudFormation, Lambda, EventBridge, IAM, CloudWatch Logs, and DynamoDB resources.
+- Credentials for each selected searcher and notifier. The Lambda execution role supplies AWS credentials for DynamoDB; do not configure `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` for the function.
+
+### Configuration
+
+The SAM template supplies these required, non-secret Lambda environment variables:
+
+| Variable | Description |
+| --- | --- |
+| `GRASS_KEYWORDS` | Comma-separated keywords, such as `grass,lambda`. |
+| `GRASS_SEARCHERS` | Comma-separated searchers: `hackernews`, `reddit`, `bluesky`, `fediverse`, `youtube`, or `x`. |
+| `GRASS_BOTS` | Comma-separated notifiers: `print`, `discord`, or `slack`. |
+| `SOCIAL_SEARCH_TABLE_NAME` | Created automatically by the template; do not override it. |
+
+Configure only the existing credential variables needed by the selected integrations. Do not commit their values or include them in `template.yaml`:
+
+- Reddit: `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, `REDDIT_USERNAME`, `REDDIT_PASSWORD`
+- Bluesky: `BSKY_USERNAME`, `BSKY_PASSWORD`
+- YouTube: `YOUTUBE_API_KEY`
+- X: `X_BEARER_TOKEN`
+- Discord: `DISCORD_BOT_TOKEN`, `DISCORD_CHANNEL_ID`
+- Slack: `SLACK_BOT_TOKEN`, `SLACK_CHANNEL_ID`
+- Fediverse: `FEDIVERSE_INSTANCES` plus the per-instance `*_ACCESS_TOKEN` or `*_CLIENT_ID` and `*_CLIENT_SECRET` variables described by the searcher
+
+Inject those credentials from a secure deployment system or set the Lambda environment configuration after deployment. If they are applied separately, reapply the complete environment map after each `sam deploy`, because CloudFormation manages the non-secret configuration in the template.
+
+### Build And Deploy
+
+Build the standalone ZIP without Docker:
+
+```bash
+make lambda-package
+```
+
+The artifact is `dist/grass-lambda.zip` and contains an executable named `bootstrap`.
+
+Build and deploy the SAM stack without `--use-container`:
+
+```bash
+sam build --template-file template.yaml
+sam deploy --guided \
+  --parameter-overrides \
+    GrassKeywords='grass,lambda' \
+    GrassSearchers='hackernews' \
+    GrassBots='print' \
+    ScheduleExpression='rate(1 hour)' \
+    FunctionTimeout=300
+```
+
+The `ScheduleExpression` is an EventBridge schedule and defaults to `rate(1 hour)`. Select an interval that fits every enabled provider's API quotas. The function is limited to one concurrent invocation to preserve the existing DynamoDB-backed duplicate check.
+
+### Monitoring And Rollback
+
+CloudWatch logs are retained for 30 days by default. Inspect them with:
+
+```bash
+sam logs --stack-name <stack-name> --name GrassFunction --tail
+```
+
+Monitor Lambda duration, errors, throttles, and provider API responses before reducing the schedule interval. If a provider can exceed the default five-minute timeout, deploy with a larger `FunctionTimeout` value up to 900 seconds.
+
+To stop scheduled runs, remove the stack:
+
+```bash
+sam delete --stack-name <stack-name>
+```
+
+The DynamoDB table is retained intentionally so duplicate history and search cursors survive rollback. Delete that table separately only when you intentionally want to reset Grass state.
+
+---
+
 This should get your Grass Bot up and running! For any issues, please refer to platform-specific documentation or API guides.

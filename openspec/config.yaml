@@ -1,0 +1,29 @@
+schema: spec-driven
+
+context: |
+  Grass is a Go 1.26 command-line bot that searches social platforms for keywords,
+  persists new results, and notifies configured outputs. The entry point is main.go.
+
+  Search providers implement search.Searcher in search/, storage backends implement
+  storage.Storer in storage/, and output integrations implement bot.Notifier in bot/.
+  Supported searchers are Hacker News, Reddit, Bluesky, Fediverse, YouTube, and X.
+  SQLite is the default storage backend; DynamoDB is optional. Print, Discord, and
+  Slack are supported notifiers.
+
+  Runtime credentials and configuration are supplied through environment variables
+  and may be loaded from a local .env file. Do not place secrets, tokens, or real
+  credential values in source code, specs, or tests.
+
+  Use standard Go formatting. Run go test ./... for verification. Releases are built
+  with GoReleaser for darwin, linux, and windows, so keep platform-specific behavior
+  explicit and preserve cross-platform compatibility.
+
+rules:
+  proposal:
+    - Describe impacts on CLI flags, environment variables, external platform APIs, and persisted data when applicable.
+    - Identify credential, rate-limit, and duplicate-result behavior for new integrations.
+  design:
+    - Preserve the existing Searcher, Storer, and Notifier interface boundaries unless the change explicitly requires an interface change.
+    - Keep network calls and credential handling inside the relevant integration package.
+  tasks:
+    - Include focused tests for changed behavior and finish with go test ./....
