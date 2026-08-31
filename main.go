@@ -17,7 +17,7 @@ var (
 	dbType      = kingpin.Flag("db", "Specify the database type to use: dynamodb or sqlite").Default("sqlite").Enum("dynamodb", "sqlite")
 	keywords    = kingpin.Flag("keyword", "Specify keywords to search for").Strings()
 	botTypes    = kingpin.Flag("bot", "Specify bot types to use: print, discord").Strings()
-	searchers   = kingpin.Flag("searchers", "Specify searchers to use: hackernews, reddit, bluesky").Strings()
+	searchers   = kingpin.Flag("searchers", "Specify searchers to use: hackernews, reddit, bluesky, fediverse, youtube, x").Strings()
 	tableName   = kingpin.Flag("table-name", "Specify the table name to use for SQLite storage").Envar("SOCIAL_SEARCH_TABLE_NAME").Default("grass").String()
 	showVersion = kingpin.Flag("version", "Show the version and exit").Bool()
 )
@@ -68,6 +68,12 @@ func main() {
 				log.Fatalf("Failed to initialize YouTube searcher: %v", err)
 			}
 			searchersList = append(searchersList, youtubeSearcher)
+		case "x":
+			xSearcher, err := search.NewXSearcher()
+			if err != nil {
+				log.Fatalf("Failed to initialize X searcher: %v", err)
+			}
+			searchersList = append(searchersList, xSearcher)
 		default:
 			log.Fatalf("Unknown searcher specified: %s", searcher)
 		}
