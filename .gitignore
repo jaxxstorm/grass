@@ -4,5 +4,8 @@
 **/.terraform
 **/terraform.tfstate*
 dist/
+*.tfvars
+*.tfvars.json
+*.tfplan
 .aws-sam/
 .build/

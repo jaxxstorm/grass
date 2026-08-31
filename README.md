@@ -57,6 +57,15 @@ Each searcher requires its own set of credentials, detailed below:
 
 ### Reddit API Credentials
 
+For unattended deployments, set `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, and
+`REDDIT_REFRESH_TOKEN`. Obtain a refresh token through browser OAuth authorization
+with `duration=permanent` and scope `read`. Grass prefers this flow when the token
+is configured, and does not send a Reddit username or password. MFA can remain
+enabled. An invalid refresh token produces an authentication error rather than
+falling back to password login.
+
+The legacy password-based setup below is also supported when no refresh token is set:
+
 1. **Create a Reddit Application**:
    - Go to [Reddit Apps](https://www.reddit.com/prefs/apps).
    - Click **Create App** and select **Script** as the app type.
@@ -154,6 +163,23 @@ SOCIAL_SEARCH_TABLE_NAME=<Your DynamoDB Table Name>
 
 ## Troubleshooting
 
+### YouTube request budget
+
+Grass searches YouTube at most once per keyword per hour, even when the job runs
+every five minutes. Three keywords normally use at most 72 requests per 24 hours.
+A persistent cap allows at most **99 attempts per Pacific calendar day**, aligned
+with YouTube's quota reset. Failed requests (including 429s) consume the budget and
+the hourly slot. Quota or storage errors never trigger an unbudgeted search.
+
+DynamoDB reserves the daily count and keyword cooldown in one atomic transaction;
+SQLite uses a transaction too. All Grass jobs using a Google project must share
+the same database/table for a shared cap. Other applications and direct API tests
+are outside this counter. Existing usage before deployment is not counted, so an
+already-exhausted Google quota still requires waiting for its reset.
+
+Skipped YouTube searches do not advance the search cursor, and other providers
+continue at the normal job frequency.
+
 - **Authentication Issues**: Ensure all required environment variables are correctly set.
 - **Permissions**: Verify that the bot has necessary permissions in the Discord channel.
 - **API Limits**: Running frequent searches on certain platforms may trigger rate limits. Be mindful of API quotas.
@@ -218,7 +244,7 @@ sam deploy --guided \
     FunctionTimeout=300
 ```
 
-The `ScheduleExpression` is an EventBridge schedule and defaults to `rate(1 hour)`. Select an interval that fits every enabled provider's API quotas. The function is limited to one concurrent invocation to preserve the existing DynamoDB-backed duplicate check.
+The `ScheduleExpression` is an EventBridge schedule and defaults to `rate(1 hour)`. Select an interval that fits every enabled provider's API quotas. Each invocation atomically acquires a DynamoDB lease before running; overlapping invocations skip successfully. The lease is shared by Lambda functions using the same table and expires one minute after the invocation deadline if the process terminates. Release checks ownership so an older invocation cannot delete a newer lease. No reserved concurrency or DynamoDB TTL configuration is required. CLI runs do not acquire this lease.
 
 ### Monitoring And Rollback
 

@@ -21,6 +21,10 @@ func NewSQLiteStorer(dbPath string) (*SQLiteStorer, error) {
 
 	// Create tables if they do not exist
 	createTables := `
+	CREATE TABLE IF NOT EXISTS youtube_budget (
+		Key TEXT PRIMARY KEY,
+		Value INTEGER NOT NULL
+	);
 	CREATE TABLE IF NOT EXISTS search_results (
 		Platform TEXT,
 		Keyword TEXT,

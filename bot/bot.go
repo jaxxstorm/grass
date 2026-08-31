@@ -31,6 +31,22 @@ func (b *Bot) Run(keyword string) {
 			continue
 		}
 
+		if provider.Platform() == "YouTube" {
+			budget, ok := b.Storer.(storage.YouTubeBudget)
+			if !ok {
+				log.Error("Skipping YouTube: storage does not support persistent request budgeting")
+				continue
+			}
+			allowed, err := budget.ReserveYouTubeSearch(keyword, time.Now())
+			if err != nil {
+				log.Error("Skipping YouTube: cannot reserve request budget", "error", err)
+				continue
+			}
+			if !allowed {
+				log.Info("Skipping YouTube: hourly cooldown or daily request cap", "keyword", keyword)
+				continue
+			}
+		}
 		results, err := provider.Search(keyword, lastSearchTime)
 		if err != nil {
 			log.Error("Error searching platform", "platform", provider.Platform(), "error", err)
