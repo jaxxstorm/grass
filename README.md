@@ -2,11 +2,11 @@
 
 > They're such a [grass](https://www.urbandictionary.com/define.php?term=Grass)!
 
-Grass is a bot that searches various platforms (Hacker News, Reddit, and Bluesky) for posts containing specified keywords. It then saves results to a pluggable database and can notify via Discord or print the results to standard output.
+Grass is a bot that searches various platforms (Hacker News, Reddit, Bluesky, Fediverse, YouTube, and X) for posts containing specified keywords. It then saves results to a pluggable database and can notify via Discord or print the results to standard output.
 
 ## Features
 
-- Search for specific keywords across multiple platforms (e.g., Hacker News, Reddit, Bluesky)
+- Search for specific keywords across multiple platforms (e.g., Hacker News, Reddit, Bluesky, X)
 - Store results in DynamoDB or SQlite
 - Notify via Discord or stdout
 - Supports running as a one-shot job, making it easy to run locally or via CI/CD pipelines (e.g., GitHub Actions)
@@ -78,8 +78,18 @@ Each searcher requires its own set of credentials, detailed below:
    - Add these values to your `.env` file:
      ```env
      BSKY_USERNAME=<Your Bluesky Handle>
-     BSKY_PASSWORD=<Your App Password>
-     ```
+      BSKY_PASSWORD=<Your App Password>
+      ```
+
+### X API Credentials
+
+1. Create an approved App in the [X Developer Console](https://console.x.com) and generate a Bearer Token.
+2. Add the token to your `.env` file:
+   ```env
+   X_BEARER_TOKEN=<Your X API Bearer Token>
+   ```
+
+The `x` searcher uses X's official recent-search API. It searches posts from the last seven days and is billed by X per post returned. X query operators can be passed directly as a keyword, for example `golang lang:en -is:retweet`.
 
 ### Optional: AWS Credentials for DynamoDB
 
@@ -107,7 +117,7 @@ To test locally, you can run the bot with the `print` bot type, which outputs re
    - **Options**:
      - `--keyword`: Specify keywords to search for (repeatable).
      - `--bot`: Specify notification types (`print`, `discord`).
-     - `--searchers`: Specify which searchers to use (`hackernews`, `reddit`, `bluesky`).
+      - `--searchers`: Specify which searchers to use (`hackernews`, `reddit`, `bluesky`, `fediverse`, `youtube`, `x`).
 
 3. **Check Output**: The bot will display search results in the terminal. This is useful for validating functionality without sending messages to Discord.
 
@@ -131,6 +141,9 @@ REDDIT_PASSWORD=<Your Reddit Password>
 # Bluesky
 BSKY_USERNAME=<Your Bluesky Handle>
 BSKY_PASSWORD=<Your App Password>
+
+# X
+X_BEARER_TOKEN=<Your X API Bearer Token>
 
 # AWS DynamoDB (if using DynamoDB)
 AWS_ACCESS_KEY_ID=<Your AWS Access Key>
