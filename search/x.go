@@ -132,12 +132,15 @@ func (x *XSearcher) Search(keyword string, afterEpochSecs int64) ([]SearchResult
 			}
 
 			results = append(results, SearchResult{
-				Platform:  x.Platform(),
-				Keyword:   keyword,
-				Title:     title,
-				URL:       postURL,
-				Timestamp: createdAt.Unix(),
-				Content:   post.Text,
+				Platform:     x.Platform(),
+				Keyword:      keyword,
+				Title:        title,
+				URL:          postURL,
+				Timestamp:    createdAt.Unix(),
+				Content:      post.Text,
+				AuthorID:     post.AuthorID,
+				AuthorHandle: user.username,
+				AuthorName:   user.name,
 			})
 		}
 

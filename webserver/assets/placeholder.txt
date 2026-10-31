@@ -1,0 +1,1 @@
+Frontend assets are built with: npm --prefix web ci && npm --prefix web run build

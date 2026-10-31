@@ -26,7 +26,7 @@ func NewBlueskySearcher() (*BlueskySearcher, error) {
 	}
 
 	searcher := &BlueskySearcher{}
-	
+
 	// Try authentication with retries
 	maxRetries := 3
 	for i := 0; i < maxRetries; i++ {
@@ -133,7 +133,7 @@ func (b *BlueskySearcher) Search(keyword string, afterEpochSecs int64) ([]Search
 	// Handle rate limiting
 	if resp.StatusCode == http.StatusTooManyRequests {
 		retryAfter := resp.Header.Get("Retry-After")
-		log.Warn("rate limit exceeded", 
+		log.Warn("rate limit exceeded",
 			"platform", b.Platform(),
 			"keyword", keyword,
 			"retry_after", retryAfter)
@@ -153,6 +153,8 @@ func (b *BlueskySearcher) Search(keyword string, afterEpochSecs int64) ([]Search
 			Uri    string `json:"uri"`
 			Author struct {
 				DisplayName string `json:"displayName"`
+				DID         string `json:"did"`
+				Handle      string `json:"handle"`
 			} `json:"author"`
 			Record struct {
 				CreatedAt string `json:"createdAt"`
@@ -188,11 +190,15 @@ func (b *BlueskySearcher) Search(keyword string, afterEpochSecs int64) ([]Search
 
 		if createdTime.Unix() > afterEpochSecs {
 			results = append(results, SearchResult{
-				Platform:  b.Platform(),
-				Keyword:   keyword,
-				Title:     fmt.Sprintf("Post by %s", post.Author.DisplayName),
-				URL:       convertAtURLToHTTPS(post.Uri),
-				Timestamp: createdTime.Unix(),
+				Platform:     b.Platform(),
+				Keyword:      keyword,
+				Title:        fmt.Sprintf("Post by %s", post.Author.DisplayName),
+				URL:          convertAtURLToHTTPS(post.Uri),
+				Timestamp:    createdTime.Unix(),
+				Content:      post.Record.Text,
+				AuthorID:     post.Author.DID,
+				AuthorHandle: post.Author.Handle,
+				AuthorName:   post.Author.DisplayName,
 			})
 		}
 	}

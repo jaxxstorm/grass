@@ -55,9 +55,11 @@ func (y *YouTubeSearcher) Search(keyword string, afterEpochSecs int64) ([]Search
 				VideoID string `json:"videoId"`
 			} `json:"id"`
 			Snippet struct {
-				Title       string `json:"title"`
-				PublishedAt string `json:"publishedAt"`
-				Description string `json:"description"`
+				Title        string `json:"title"`
+				PublishedAt  string `json:"publishedAt"`
+				Description  string `json:"description"`
+				ChannelID    string `json:"channelId"`
+				ChannelTitle string `json:"channelTitle"`
 			} `json:"snippet"`
 		} `json:"items"`
 	}
@@ -78,12 +80,14 @@ func (y *YouTubeSearcher) Search(keyword string, afterEpochSecs int64) ([]Search
 		if publishedTime.Unix() > afterEpochSecs {
 			videoURL := fmt.Sprintf("https://www.youtube.com/watch?v=%s", item.ID.VideoID)
 			results = append(results, SearchResult{
-				Platform:  y.Platform(),
-				Keyword:   keyword,
-				Title:     item.Snippet.Title,
-				URL:       videoURL,
-				Timestamp: publishedTime.Unix(),
-				Content:   item.Snippet.Description,
+				Platform:   y.Platform(),
+				Keyword:    keyword,
+				Title:      item.Snippet.Title,
+				URL:        videoURL,
+				Timestamp:  publishedTime.Unix(),
+				Content:    item.Snippet.Description,
+				AuthorID:   item.Snippet.ChannelID,
+				AuthorName: item.Snippet.ChannelTitle,
 			})
 		}
 	}

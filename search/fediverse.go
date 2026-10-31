@@ -139,6 +139,7 @@ func (f *FediverseSearcher) Search(keyword string, afterEpochSecs int64) ([]Sear
 				Account   struct {
 					DisplayName string `json:"display_name"`
 					Acct        string `json:"acct"`
+					URL         string `json:"url"`
 				} `json:"account"`
 			} `json:"statuses"`
 		}
@@ -161,14 +162,26 @@ func (f *FediverseSearcher) Search(keyword string, afterEpochSecs int64) ([]Sear
 
 			// Clean the content before creating the SearchResult
 			cleanedContent := cleanHTMLContent(status.Content)
+			handle := status.Account.Acct
+			if handle != "" && !strings.Contains(handle, "@") {
+				instance, err := url.Parse(instanceURL)
+				if err == nil && instance.Host != "" {
+					handle += "@" + instance.Host
+				} else {
+					handle = ""
+				}
+			}
 
 			allResults = append(allResults, SearchResult{
-				Platform:  f.Platform(),
-				Keyword:   keyword,
-				Title:     fmt.Sprintf("Post by %s (@%s)", status.Account.DisplayName, status.Account.Acct),
-				URL:       status.URL,
-				Timestamp: createdTime.Unix(),
-				Content:   cleanedContent,
+				Platform:     f.Platform(),
+				Keyword:      keyword,
+				Title:        fmt.Sprintf("Post by %s (@%s)", status.Account.DisplayName, status.Account.Acct),
+				URL:          status.URL,
+				Timestamp:    createdTime.Unix(),
+				Content:      cleanedContent,
+				AuthorID:     status.Account.URL,
+				AuthorHandle: handle,
+				AuthorName:   status.Account.DisplayName,
 			})
 		}
 	}

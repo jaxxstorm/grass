@@ -1,7 +1,21 @@
 LAMBDA_BUILD_DIR := .build/lambda
 LAMBDA_ZIP := dist/grass-lambda.zip
 
-.PHONY: lambda-package build-GrassFunction
+.PHONY: lambda-package build-GrassFunction web-build build web-test
+
+web-build:
+	npm --prefix web ci
+	npm --prefix web run build
+	test -f webserver/assets/dist/index.html
+
+build: web-build
+	mkdir -p .build
+	go build -o .build/grass .
+
+web-test:
+	npm --prefix web run typecheck
+	npm --prefix web test
+	npm --prefix web run test:e2e
 
 lambda-package:
 	mkdir -p "$(LAMBDA_BUILD_DIR)" "$(dir $(LAMBDA_ZIP))"

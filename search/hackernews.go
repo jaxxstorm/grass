@@ -46,6 +46,8 @@ func (h *HackerNewsSearcher) Search(keyword string, afterEpochSecs int64) ([]Sea
 			CreatedAt   int64    `json:"created_at_i"`
 			CommentText string   `json:"comment_text"`
 			StoryTitle  string   `json:"story_title"`
+			StoryText   string   `json:"story_text"`
+			Author      string   `json:"author"`
 			Type        []string `json:"_tags"`
 		} `json:"hits"`
 	}
@@ -75,7 +77,7 @@ func (h *HackerNewsSearcher) Search(keyword string, afterEpochSecs int64) ([]Sea
 		}
 
 		title := hit.Title
-		content := ""
+		content := hit.StoryText
 
 		if isComment {
 			// For comments, use the story title and comment text
@@ -92,12 +94,13 @@ func (h *HackerNewsSearcher) Search(keyword string, afterEpochSecs int64) ([]Sea
 		}
 
 		results = append(results, SearchResult{
-			Platform:  h.Platform(),
-			Keyword:   keyword,
-			Title:     title,
-			URL:       hackerNewsURL,
-			Content:   content,
-			Timestamp: timestamp,
+			Platform:     h.Platform(),
+			Keyword:      keyword,
+			Title:        title,
+			URL:          hackerNewsURL,
+			Content:      content,
+			AuthorHandle: hit.Author,
+			Timestamp:    timestamp,
 		})
 	}
 

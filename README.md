@@ -267,3 +267,9 @@ The DynamoDB table is retained intentionally so duplicate history and search cur
 ---
 
 This should get your Grass Bot up and running! For any issues, please refer to platform-specific documentation or API guides.
+## Archive explorer
+
+Run `make build`, then `.build/grass analyse --destination sqlite serve --table-name=grass`
+to browse and analyze collected results at <http://127.0.0.1:8080>.
+See [archive explorer documentation](docs/archive.md) for SQLite, development,
+read permissions, snapshot limits, and historical data coverage.

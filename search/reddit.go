@@ -133,11 +133,13 @@ func (r *RedditSearcher) Search(keyword string, afterEpochSecs int64) ([]SearchR
 		Data struct {
 			Children []struct {
 				Data struct {
-					Title     string  `json:"title"`
-					URL       string  `json:"url"`
-					Permalink string  `json:"permalink"`
-					CreatedAt float64 `json:"created_utc"`
-					Selftext  string  `json:"selftext"`
+					Title          string  `json:"title"`
+					URL            string  `json:"url"`
+					Permalink      string  `json:"permalink"`
+					CreatedAt      float64 `json:"created_utc"`
+					Author         string  `json:"author"`
+					AuthorFullname string  `json:"author_fullname"`
+					Selftext       string  `json:"selftext"`
 				} `json:"data"`
 			} `json:"children"`
 		} `json:"data"`
@@ -156,16 +158,22 @@ func (r *RedditSearcher) Search(keyword string, afterEpochSecs int64) ([]SearchR
 			!strings.Contains(strings.ToLower(post.URL), matchKeyword) {
 			continue
 		}
+		if strings.EqualFold(strings.TrimSpace(post.Author), "[deleted]") {
+			post.Author, post.AuthorFullname = "", ""
+		}
 		// Only include results after the specified epoch time
 		if int64(post.CreatedAt) > afterEpochSecs {
 			// Use permalink to link directly to the Reddit post
 			postURL := fmt.Sprintf("https://www.reddit.com%s", post.Permalink)
 			results = append(results, SearchResult{
-				Platform:  r.Platform(),
-				Keyword:   keyword,
-				Title:     post.Title,
-				URL:       postURL,
-				Timestamp: timestamp,
+				Platform:     r.Platform(),
+				Keyword:      keyword,
+				Title:        post.Title,
+				URL:          postURL,
+				Timestamp:    timestamp,
+				Content:      post.Selftext,
+				AuthorID:     post.AuthorFullname,
+				AuthorHandle: post.Author,
 			})
 		}
 	}

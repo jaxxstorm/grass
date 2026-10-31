@@ -38,10 +38,7 @@ func Run(config Config) error {
 	}
 
 	runner := bot.NewBot(searchers, storer, notifiers)
-	for _, keyword := range config.Keywords {
-		log.Printf("Running search for keyword: %s", keyword)
-		runner.Run(keyword)
-	}
+	runner.RunKeywords(config.Keywords)
 	return nil
 }
 
