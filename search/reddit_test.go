@@ -1,6 +1,7 @@
 package search
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -8,6 +9,51 @@ import (
 )
 
 type redditTransport func(*http.Request) (*http.Response, error)
+
+func TestRedditSearchRequiresKeywordInPost(t *testing.T) {
+	for _, tc := range []struct {
+		name, title, body, url string
+		created                int64
+		want                   bool
+	}{
+		{"title", "Using Tailscale", "", "", 101, true},
+		{"body", "Networking", "Try TAILSCALE for this.", "", 101, true},
+		{"linked URL", "Networking", "", "https://tailscale.com/blog/example", 101, true},
+		{"co-op false positive", "The Co-Op Mod has PvP!", "Link to mod: https://www.nexusmods.com/phantombladezero/mods/64", "https://i.redd.it/o199uxmg6uyh1.jpeg", 101, false},
+		{"rye false positive", "Version 0.2.70 will bring some detail changes in evaluator", "https://ryelang.org/", "https://i.redd.it/whoe321wlsyh1.png", 101, false},
+		{"metadata only", "Unrelated", "", "", 101, false},
+		{"at cutoff", "Tailscale", "", "", 100, false},
+		{"before cutoff", "Tailscale", "", "", 99, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			post := map[string]any{"title": tc.title, "selftext": tc.body, "url": tc.url, "created_utc": tc.created,
+				"author": "tailscale", "permalink": "/r/tailscale/comments/example"}
+			body, err := json.Marshal(map[string]any{"data": map[string]any{"children": []any{map[string]any{"data": post}}}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			original := http.DefaultTransport
+			t.Cleanup(func() { http.DefaultTransport = original })
+			http.DefaultTransport = redditTransport(func(req *http.Request) (*http.Response, error) {
+				if req.URL.Query().Get("q") != "tailscale" {
+					t.Fatalf("unexpected query: %s", req.URL.RawQuery)
+				}
+				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(string(body)))}, nil
+			})
+			results, err := (&RedditSearcher{accessToken: "test"}).Search("tailscale", 100)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantCount := 0
+			if tc.want {
+				wantCount = 1
+			}
+			if len(results) != wantCount {
+				t.Fatalf("got %d results, want %d", len(results), wantCount)
+			}
+		})
+	}
+}
 
 func (f redditTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 

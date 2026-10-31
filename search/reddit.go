@@ -106,6 +106,10 @@ func (r *RedditSearcher) authenticate() error {
 
 // Search Reddit for posts matching a keyword after a specific epoch time
 func (r *RedditSearcher) Search(keyword string, afterEpochSecs int64) ([]SearchResult, error) {
+	matchKeyword := strings.ToLower(strings.TrimSpace(keyword))
+	if matchKeyword == "" {
+		return nil, nil
+	}
 	searchURL := fmt.Sprintf("https://oauth.reddit.com/search?q=%s&sort=new&restrict_sr=1", url.QueryEscape(keyword))
 	req, err := http.NewRequest("GET", searchURL, nil)
 	if err != nil {
@@ -133,6 +137,7 @@ func (r *RedditSearcher) Search(keyword string, afterEpochSecs int64) ([]SearchR
 					URL       string  `json:"url"`
 					Permalink string  `json:"permalink"`
 					CreatedAt float64 `json:"created_utc"`
+					Selftext  string  `json:"selftext"`
 				} `json:"data"`
 			} `json:"children"`
 		} `json:"data"`
@@ -145,6 +150,12 @@ func (r *RedditSearcher) Search(keyword string, afterEpochSecs int64) ([]SearchR
 	timestamp := time.Now().Unix()
 	for _, child := range data.Data.Children {
 		post := child.Data
+		// Reddit can return unrelated results; require a literal match in post content.
+		if !strings.Contains(strings.ToLower(post.Title), matchKeyword) &&
+			!strings.Contains(strings.ToLower(post.Selftext), matchKeyword) &&
+			!strings.Contains(strings.ToLower(post.URL), matchKeyword) {
+			continue
+		}
 		// Only include results after the specified epoch time
 		if int64(post.CreatedAt) > afterEpochSecs {
 			// Use permalink to link directly to the Reddit post
