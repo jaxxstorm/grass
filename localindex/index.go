@@ -285,9 +285,7 @@ func (i *Index) BeginStage(ctx context.Context, token string, stage Stage) error
 }
 
 func put(ctx context.Context, tx *sql.Tx, r storage.ArchiveRecord, staging bool) (bool, error) {
-	r.Title = storage.ArchivePlainText(r.Title)
-	r.Content = storage.ArchivePlainText(r.Content)
-	r.AuthorName = storage.ArchivePlainText(r.AuthorName)
+	r.Content = storage.ArchiveContent(r.Platform, r.Content)
 	r.AuthorKey = r.SearchResult.AuthorKey()
 	hash := sha256.Sum256([]byte(r.Platform + "\x00" + r.URL))
 	r.ID = hex.EncodeToString(hash[:])

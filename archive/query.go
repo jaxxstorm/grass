@@ -83,7 +83,7 @@ var stopwords = func() map[string]bool {
 var cloudURLs = regexp.MustCompile(`(?i)(?:https?://|www\.)\S+`)
 
 func Tokens(s string) map[string]bool {
-	s = cloudURLs.ReplaceAllString(storage.ArchivePlainText(s), " ")
+	s = cloudURLs.ReplaceAllString(s, " ")
 	words := strings.FieldsFunc(strings.ToLower(s), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
 	tokens := map[string]bool{}
 	for _, word := range words {

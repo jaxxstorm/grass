@@ -328,3 +328,39 @@ func TestBootstrapCatchupRestartAndLegacyActivation(t *testing.T) {
 		t.Fatal("activation reconciliation lost baseline")
 	}
 }
+
+func TestReconcileRestartsFailedCatchup(t *testing.T) {
+	for _, published := range []bool{false, true} {
+		t.Run(fmt.Sprintf("published=%v", published), func(t *testing.T) {
+			ctx := context.Background()
+			f := &fixtureSource{head: archivesource.Head{Mode: "journal", Epoch: "epoch"}, records: []storage.ArchiveRecord{record(0)}}
+			s, _ := directService(t, f)
+			if published {
+				if err := s.synchronize(ctx, false); err != nil {
+					t.Fatal(err)
+				}
+			}
+			f.duringScan, f.failChanges = true, true
+			if err := s.synchronize(ctx, published); err == nil {
+				t.Fatal("expected catch-up failure")
+			}
+			_, stage, err := s.index.State(ctx)
+			if err != nil || !stage.Active || stage.Phase != "catchup" || stage.Sequence != 0 {
+				t.Fatalf("failed stage: %+v %v", stage, err)
+			}
+			scans := f.scans
+			if err := s.synchronize(ctx, false); err == nil || f.scans != scans {
+				t.Fatal("ordinary refresh should resume the failed catch-up")
+			}
+			// The source can be scanned even when the old journal range is unreadable.
+			f.records = []storage.ArchiveRecord{record(1), record(999)}
+			if err := s.synchronize(ctx, true); err != nil {
+				t.Fatal(err)
+			}
+			state, stage, err := s.index.State(ctx)
+			if err != nil || state.Sequence != 1 || state.Records != 2 || stage.Active || f.scans != scans+1 {
+				t.Fatalf("replacement baseline: %+v %+v scans=%d err=%v", state, stage, f.scans, err)
+			}
+		})
+	}
+}

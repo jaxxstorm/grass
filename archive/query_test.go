@@ -40,7 +40,7 @@ func TestQueryFiltersAndValidation(t *testing.T) {
 			t.Fatalf("accepted invalid query %v", v)
 		}
 	}
-	tokens := Tokens("<p>Green green GREEN 123 the https://example.test/secret </p> café café")
+	tokens := Tokens("Green green GREEN 123 the https://example.test/secret café café")
 	if len(tokens) != 2 || !tokens["green"] || !tokens["café"] {
 		t.Fatalf("bad tokens: %v", tokens)
 	}
@@ -52,6 +52,15 @@ func TestQueryFiltersAndValidation(t *testing.T) {
 	q.To = time.Unix(100, 0)
 	if Evaluate([]storage.ArchiveRecord{{SearchResult: r}}, q).Total != 0 {
 		t.Fatal("to not exclusive")
+	}
+}
+
+func TestTokensPreserveLiteralAngleBrackets(t *testing.T) {
+	tokens := Tokens("Use <Widget> when lower < middle > upper")
+	for _, word := range []string{"widget", "lower", "middle", "upper"} {
+		if !tokens[word] {
+			t.Fatalf("lost literal token %q: %v", word, tokens)
+		}
 	}
 }
 

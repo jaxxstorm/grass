@@ -88,9 +88,7 @@ func (b *archiveBuffer) add(r search.SearchResult) error {
 	}
 	b.bytes += size
 	b.seen[key] = true
-	r.Title = ArchivePlainText(r.Title)
-	r.Content = ArchivePlainText(r.Content)
-	r.AuthorName = ArchivePlainText(r.AuthorName)
+	r.Content = ArchiveContent(r.Platform, r.Content)
 	hash := sha256.Sum256([]byte(key))
 	b.records = append(b.records, ArchiveRecord{SearchResult: r, ID: hex.EncodeToString(hash[:]), AuthorKey: r.AuthorKey()})
 	return nil

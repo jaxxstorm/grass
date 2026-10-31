@@ -183,20 +183,15 @@ func (s *Service) synchronize(ctx context.Context, reconcile bool) error {
 		}
 		return s.replay(ctx, src, token, state.Epoch, state.Sequence, head.Sequence, nil)
 	}
+	// Reconciliation establishes a fresh baseline, even after failed catch-up.
 	// A source SQLite transaction cannot survive a process restart.
-	if !stage.Active || head.Mode == "sqlite" {
+	if !stage.Active || reconcile || head.Mode == "sqlite" {
 		stage = localindex.Stage{Active: true, Epoch: head.Epoch, Mode: head.Mode, Sequence: head.Sequence, Phase: "scan"}
 		if err = s.index.BeginStage(ctx, token, stage); err != nil {
 			return err
 		}
 	} else if stage.Epoch != head.Epoch || stage.Mode != head.Mode {
-		if !reconcile {
-			return actionError("Source journal changed during bootstrap. Reconcile archive to restart the import.")
-		}
-		stage = localindex.Stage{Active: true, Epoch: head.Epoch, Mode: head.Mode, Sequence: head.Sequence, Phase: "scan"}
-		if err = s.index.BeginStage(ctx, token, stage); err != nil {
-			return err
-		}
+		return actionError("Source journal changed during bootstrap. Reconcile archive to restart the import.")
 	}
 	lastLog := time.Now()
 	imported := 0
