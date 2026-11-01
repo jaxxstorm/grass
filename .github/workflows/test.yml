@@ -1,0 +1,38 @@
+name: Test
+on:
+  push:
+  pull_request:
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Go tests with placeholder assets
+        run: go test ./...
+      - name: Pure-Go FTS5 and local sync tests
+        run: CGO_ENABLED=0 go test ./localindex ./archivesource ./archivesync
+      - name: Concurrency checks
+        run: go test -race ./localindex ./archivesync ./storage ./bot
+      - run: make web-build
+      - run: npm --prefix web test
+      - run: npx --prefix web playwright install --with-deps chromium
+      - run: npm --prefix web run test:e2e
+      - name: Build CLI and standalone Lambda
+        run: |
+          go build -o .build/grass .
+          CGO_ENABLED=0 go build -o .build/grass-dynamodb .
+          make lambda-package
+      - name: Verify Lambda dependency boundary
+        run: |
+          if go list -deps ./cmd/lambda | grep -E 'github.com/jaxxstorm/grass/(localindex|archivesync|archivesource|webserver)$|modernc.org/sqlite'; then
+            exit 1
+          fi

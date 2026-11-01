@@ -26,7 +26,7 @@ func NewBlueskySearcher() (*BlueskySearcher, error) {
 	}
 
 	searcher := &BlueskySearcher{}
-	
+
 	// Try authentication with retries
 	maxRetries := 3
 	for i := 0; i < maxRetries; i++ {
@@ -108,12 +108,12 @@ func convertAtURLToHTTPS(atURL string) string {
 
 // Search queries Bluesky for posts matching a keyword.
 func (b *BlueskySearcher) Search(keyword string, afterEpochSecs int64) ([]SearchResult, error) {
-	// If we don't have an access token, return empty results
+	// Authentication failure must not be mistaken for a completed empty search.
 	if b.accessToken == "" {
 		log.Warn("search attempted without valid authentication",
 			"platform", "Bluesky",
 			"keyword", keyword)
-		return []SearchResult{}, nil
+		return nil, errors.New("Bluesky search requires authentication")
 	}
 
 	url := fmt.Sprintf("https://bsky.social/xrpc/app.bsky.feed.searchPosts?q=%s", keyword)
@@ -133,11 +133,11 @@ func (b *BlueskySearcher) Search(keyword string, afterEpochSecs int64) ([]Search
 	// Handle rate limiting
 	if resp.StatusCode == http.StatusTooManyRequests {
 		retryAfter := resp.Header.Get("Retry-After")
-		log.Warn("rate limit exceeded", 
+		log.Warn("rate limit exceeded",
 			"platform", b.Platform(),
 			"keyword", keyword,
 			"retry_after", retryAfter)
-		return []SearchResult{}, nil
+		return nil, errors.New("Bluesky search rate limited")
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -145,7 +145,7 @@ func (b *BlueskySearcher) Search(keyword string, afterEpochSecs int64) ([]Search
 			"platform", b.Platform(),
 			"keyword", keyword,
 			"status_code", resp.StatusCode)
-		return []SearchResult{}, nil
+		return nil, fmt.Errorf("Bluesky search returned HTTP %d", resp.StatusCode)
 	}
 
 	var data struct {
@@ -153,6 +153,8 @@ func (b *BlueskySearcher) Search(keyword string, afterEpochSecs int64) ([]Search
 			Uri    string `json:"uri"`
 			Author struct {
 				DisplayName string `json:"displayName"`
+				DID         string `json:"did"`
+				Handle      string `json:"handle"`
 			} `json:"author"`
 			Record struct {
 				CreatedAt string `json:"createdAt"`
@@ -165,7 +167,7 @@ func (b *BlueskySearcher) Search(keyword string, afterEpochSecs int64) ([]Search
 			"platform", b.Platform(),
 			"keyword", keyword,
 			"error", err)
-		return []SearchResult{}, nil
+		return nil, fmt.Errorf("decode Bluesky search: %w", err)
 	}
 
 	var results []SearchResult
@@ -188,11 +190,15 @@ func (b *BlueskySearcher) Search(keyword string, afterEpochSecs int64) ([]Search
 
 		if createdTime.Unix() > afterEpochSecs {
 			results = append(results, SearchResult{
-				Platform:  b.Platform(),
-				Keyword:   keyword,
-				Title:     fmt.Sprintf("Post by %s", post.Author.DisplayName),
-				URL:       convertAtURLToHTTPS(post.Uri),
-				Timestamp: createdTime.Unix(),
+				Platform:     b.Platform(),
+				Keyword:      keyword,
+				Title:        fmt.Sprintf("Post by %s", post.Author.DisplayName),
+				URL:          convertAtURLToHTTPS(post.Uri),
+				Timestamp:    createdTime.Unix(),
+				Content:      post.Record.Text,
+				AuthorID:     post.Author.DID,
+				AuthorHandle: post.Author.Handle,
+				AuthorName:   post.Author.DisplayName,
 			})
 		}
 	}

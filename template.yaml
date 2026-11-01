@@ -56,7 +56,6 @@ Resources:
       Architectures: [arm64]
       MemorySize: 256
       Timeout: !Ref FunctionTimeout
-      ReservedConcurrentExecutions: 1
       Environment:
         Variables:
           GRASS_KEYWORDS: !Ref GrassKeywords
@@ -71,6 +70,8 @@ Resources:
               Action:
                 - dynamodb:GetItem
                 - dynamodb:PutItem
+                - dynamodb:DeleteItem
+                - dynamodb:UpdateItem
               Resource: !GetAtt GrassStateTable.Arn
       Events:
         ScheduledRun:

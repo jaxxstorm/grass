@@ -2,8 +2,10 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/jaxxstorm/grass/search"
 	_ "github.com/mattn/go-sqlite3"
@@ -21,6 +23,10 @@ func NewSQLiteStorer(dbPath string) (*SQLiteStorer, error) {
 
 	// Create tables if they do not exist
 	createTables := `
+	CREATE TABLE IF NOT EXISTS youtube_budget (
+		Key TEXT PRIMARY KEY,
+		Value INTEGER NOT NULL
+	);
 	CREATE TABLE IF NOT EXISTS search_results (
 		Platform TEXT,
 		Keyword TEXT,
@@ -34,10 +40,58 @@ func NewSQLiteStorer(dbPath string) (*SQLiteStorer, error) {
 	);`
 	_, err = db.Exec(createTables)
 	if err != nil {
+		db.Close()
 		return nil, err
 	}
 
+	if err := migrateArchiveMetadata(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return &SQLiteStorer{db: db}, nil
+}
+
+// Serialize schema inspection and changes so concurrent collector startups do
+// not race between detecting a missing column and adding it.
+func migrateArchiveMetadata(db *sql.DB) error {
+	conn, err := db.Conn(context.Background())
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if _, err = conn.ExecContext(context.Background(), "BEGIN IMMEDIATE"); err != nil {
+		return err
+	}
+	defer conn.ExecContext(context.Background(), "ROLLBACK")
+	rows, err := conn.QueryContext(context.Background(), "PRAGMA table_info(search_results)")
+	if err != nil {
+		return err
+	}
+	columns := map[string]bool{}
+	for rows.Next() {
+		var cid, notnull, pk int
+		var name, typ string
+		var def sql.NullString
+		if err := rows.Scan(&cid, &name, &typ, &notnull, &def, &pk); err != nil {
+			rows.Close()
+			return err
+		}
+		columns[strings.ToLower(name)] = true
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	for _, name := range []string{"Content", "AuthorID", "AuthorHandle", "AuthorName"} {
+		if !columns[strings.ToLower(name)] {
+			if _, err := conn.ExecContext(context.Background(), "ALTER TABLE search_results ADD COLUMN "+name+" TEXT"); err != nil {
+				return err
+			}
+		}
+	}
+	_, err = conn.ExecContext(context.Background(), "COMMIT")
+	return err
 }
 
 // Exists checks if a specific item already exists in SQLite.
@@ -51,11 +105,11 @@ func (s *SQLiteStorer) Exists(platform, url string) (bool, error) {
 // Save stores a new search result in SQLite.
 func (s *SQLiteStorer) Save(result search.SearchResult) error {
 	query := `
-	INSERT INTO search_results (Platform, Keyword, Title, URL, Timestamp)
-	VALUES (?, ?, ?, ?, ?)
+	INSERT INTO search_results (Platform, Keyword, Title, URL, Timestamp, Content, AuthorID, AuthorHandle, AuthorName)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(URL) DO NOTHING;
 	`
-	_, err := s.db.Exec(query, result.Platform, result.Keyword, result.Title, result.URL, result.Timestamp)
+	_, err := s.db.Exec(query, result.Platform, result.Keyword, result.Title, result.URL, result.Timestamp, result.Content, result.AuthorID, result.AuthorHandle, result.AuthorName)
 	return err
 }
 

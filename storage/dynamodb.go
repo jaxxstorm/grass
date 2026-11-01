@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -55,6 +56,12 @@ func (d *DynamoDBStorer) Exists(platform, url string) (bool, error) {
 
 // Save stores a new search result in DynamoDB.
 func (d *DynamoDBStorer) Save(result search.SearchResult) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return saveJournal(ctx, d.client, d.tableName, result)
+}
+
+func resultItem(result search.SearchResult) map[string]types.AttributeValue {
 	item := map[string]types.AttributeValue{
 		"Platform":  &types.AttributeValueMemberS{Value: result.Platform},
 		"SortKey":   &types.AttributeValueMemberS{Value: result.URL},
@@ -62,17 +69,16 @@ func (d *DynamoDBStorer) Save(result search.SearchResult) error {
 		"Title":     &types.AttributeValueMemberS{Value: result.Title},
 		"Timestamp": &types.AttributeValueMemberN{Value: strconv.FormatInt(result.Timestamp, 10)},
 	}
-
-	input := &dynamodb.PutItemInput{
-		TableName: aws.String(d.tableName),
-		Item:      item,
+	for key, value := range map[string]string{
+		"Content": result.Content, "AuthorID": result.AuthorID,
+		"AuthorHandle": result.AuthorHandle, "AuthorName": result.AuthorName,
+	} {
+		if value != "" {
+			item[key] = &types.AttributeValueMemberS{Value: value}
+		}
 	}
 
-	_, err := d.client.PutItem(context.TODO(), input)
-	if err != nil {
-		return fmt.Errorf("failed to put item into DynamoDB: %w", err)
-	}
-	return nil
+	return item
 }
 
 // GetLastSearchTime retrieves the last search time for a given platform from DynamoDB.

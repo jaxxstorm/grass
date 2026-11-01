@@ -18,7 +18,8 @@ func TestHandlerRunsConfiguredApplication(t *testing.T) {
 	}
 	called := false
 	handler := Handler{
-		getenv: func(key string) string { return values[key] },
+		acquire: func(context.Context, string) (func() error, error) { return func() error { return nil }, nil },
+		getenv:  func(key string) string { return values[key] },
 		run: func(config app.Config) error {
 			called = true
 			if config.Database != app.DatabaseDynamoDB {

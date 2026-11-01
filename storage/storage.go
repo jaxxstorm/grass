@@ -1,7 +1,12 @@
 // storage/storage.go
 package storage
 
-import "github.com/jaxxstorm/grass/search"
+import (
+	"errors"
+	"github.com/jaxxstorm/grass/search"
+)
+
+var ErrAlreadyExists = errors.New("result already exists")
 
 // Storer defines the methods required for storing search results.
 type Storer interface {

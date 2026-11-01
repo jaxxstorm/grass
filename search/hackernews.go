@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/charmbracelet/log"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -21,20 +22,20 @@ func (h *HackerNewsSearcher) Platform() string {
 
 // Search performs a keyword search on Hacker News after a specified epoch time.
 func (h *HackerNewsSearcher) Search(keyword string, afterEpochSecs int64) ([]SearchResult, error) {
-	apiURL := fmt.Sprintf(
-		"https://hn.algolia.com/api/v1/search_by_date?query=%s&tags=(story,comment)&numericFilters=created_at_i>%d",
-		keyword, afterEpochSecs,
-	)
+	params := url.Values{
+		"query":          {keyword},
+		"tags":           {"(story,comment)"},
+		"numericFilters": {fmt.Sprintf("created_at_i>%d", afterEpochSecs)},
+	}
+	apiURL := "https://hn.algolia.com/api/v1/search_by_date?" + params.Encode()
 	resp, err := http.Get(apiURL)
 	if err != nil {
-		log.Warn("failed to make request", "error", err)
-		return []SearchResult{}, nil
+		return nil, fmt.Errorf("Hacker News request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Warn("unexpected status code", "status", resp.Status)
-		return []SearchResult{}, nil
+		return nil, fmt.Errorf("Hacker News search failed: HTTP %d", resp.StatusCode)
 	}
 
 	var result struct {
@@ -45,13 +46,14 @@ func (h *HackerNewsSearcher) Search(keyword string, afterEpochSecs int64) ([]Sea
 			CreatedAt   int64    `json:"created_at_i"`
 			CommentText string   `json:"comment_text"`
 			StoryTitle  string   `json:"story_title"`
+			StoryText   string   `json:"story_text"`
+			Author      string   `json:"author"`
 			Type        []string `json:"_tags"`
 		} `json:"hits"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		log.Warn("failed to decode response", "error", err)
-		return []SearchResult{}, nil
+		return nil, fmt.Errorf("decode Hacker News search response: %w", err)
 	}
 
 	var results []SearchResult
@@ -75,7 +77,7 @@ func (h *HackerNewsSearcher) Search(keyword string, afterEpochSecs int64) ([]Sea
 		}
 
 		title := hit.Title
-		content := ""
+		content := hit.StoryText
 
 		if isComment {
 			// For comments, use the story title and comment text
@@ -92,12 +94,13 @@ func (h *HackerNewsSearcher) Search(keyword string, afterEpochSecs int64) ([]Sea
 		}
 
 		results = append(results, SearchResult{
-			Platform:  h.Platform(),
-			Keyword:   keyword,
-			Title:     title,
-			URL:       hackerNewsURL,
-			Content:   content,
-			Timestamp: timestamp,
+			Platform:     h.Platform(),
+			Keyword:      keyword,
+			Title:        title,
+			URL:          hackerNewsURL,
+			Content:      content,
+			AuthorHandle: hit.Author,
+			Timestamp:    timestamp,
 		})
 	}
 

@@ -7,6 +7,7 @@ import (
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/charmbracelet/log"
 	"github.com/jaxxstorm/grass/app"
+	"github.com/jaxxstorm/grass/webserver"
 	"github.com/joho/godotenv"
 )
 
@@ -29,6 +30,18 @@ func init() {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "analyse" {
+		if err := webserver.RunAnalyse(os.Args[2:]); err != nil {
+			log.Fatalf("Failed to analyse archive: %v", err)
+		}
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "serve" {
+		if err := webserver.Run(os.Args[2:]); err != nil {
+			log.Fatalf("Failed to serve archive: %v", err)
+		}
+		return
+	}
 	kingpin.Parse()
 
 	if *showVersion {
