@@ -74,6 +74,18 @@ func TestSQLFiltersAggregatesAndReadGeneration(t *testing.T) {
 	if err != nil || out.Total != 50 {
 		t.Fatal("inclusive lower bound failed")
 	}
+	q.From = q.From.Add(time.Nanosecond)
+	out, err = i.Query(ctx, q)
+	if err != nil || out.Total != 0 {
+		t.Fatal("nanosecond lower bound included midnight")
+	}
+	q.To = q.From
+	q.From = time.Time{}
+	out, err = i.Query(ctx, q)
+	if err != nil || out.Total != 50 {
+		t.Fatal("nanosecond upper bound excluded midnight")
+	}
+	q.From = time.Unix(1767225600, 0)
 	q.To = q.From
 	out, err = i.Query(ctx, q)
 	if err != nil || out.Total != 0 || out.Results == nil || out.Activity == nil {

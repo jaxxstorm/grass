@@ -37,6 +37,14 @@ func NewDynamo(ctx context.Context, table string, limits storage.ArchiveLimits) 
 	if err != nil {
 		return nil, err
 	}
+	return NewDynamoFromConfig(cfg, table, limits)
+}
+
+// NewDynamoFromConfig uses the same resolved configuration as the cache identity.
+func NewDynamoFromConfig(cfg aws.Config, table string, limits storage.ArchiveLimits) (*Dynamo, error) {
+	if err := limits.Validate(); err != nil {
+		return nil, err
+	}
 	if cfg.Region == "" {
 		return nil, errors.New("AWS region is missing; set AWS_REGION or configure the selected profile")
 	}
@@ -173,7 +181,7 @@ func (d *Dynamo) Changes(ctx context.Context, epoch string, after, target int64)
 			seen[identity] = true
 		}
 	}
-	items := map[string]storage.ArchiveRecord{}
+	items := map[string]map[string]types.AttributeValue{}
 	// BatchGet bills each record separately. Avoid a 100-RCU burst on a
 	// low-capacity table even when the journal Query fits in a small page.
 	batchSize := max(1, int(min(100.0, d.budget.rate)))
@@ -200,7 +208,7 @@ func (d *Dynamo) Changes(ctx context.Context, epoch string, after, target int64)
 				if !ok {
 					return p, errors.New("invalid referenced archive record")
 				}
-				items[r.Platform+"\x00"+r.URL] = r
+				items[r.Platform+"\x00"+r.URL] = item
 			}
 			pending = got.UnprocessedKeys[d.table].Keys
 			if len(pending) > 0 {
@@ -218,10 +226,15 @@ func (d *Dynamo) Changes(ctx context.Context, epoch string, after, target int64)
 		}
 	}
 	for _, e := range events {
-		r, ok := items[e.Platform+"\x00"+e.URL]
+		item, ok := items[e.Platform+"\x00"+e.URL]
 		if !ok {
 			return p, fmt.Errorf("missing referenced record: %w", ErrJournal)
 		}
+		sequence, ok := item["JournalSequence"].(*types.AttributeValueMemberN)
+		if !ok || sequence.Value != strconv.FormatInt(e.Sequence, 10) || str(item, "JournalEpoch") != epoch || str(item, "JournalWriteID") != e.WriteID {
+			return Page{}, fmt.Errorf("referenced record write identity changed: %w", ErrJournal)
+		}
+		r, _ := decode(item)
 		p.Records = append(p.Records, r)
 	}
 	p.Examined = len(events)

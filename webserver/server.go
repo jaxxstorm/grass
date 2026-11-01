@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/jaxxstorm/grass/archive"
 	"github.com/jaxxstorm/grass/archivesource"
 	"github.com/jaxxstorm/grass/archivesync"
@@ -137,7 +138,7 @@ func Handler(s archiveService, frontend fs.FS) http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(index)
 	})
-	return mux
+	return http.NewCrossOriginProtection().Handler(mux)
 }
 
 func Run(args []string) error {
@@ -225,17 +226,13 @@ func run(args []string, analyse bool) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	source := localindex.Source{Kind: *db, Table: *table}
+	var dynamoConfig aws.Config
 	if *db == "sqlite" {
 		source.Path = *table + ".db"
 	} else {
-		source.Profile = os.Getenv("AWS_PROFILE")
-		source.Region = os.Getenv("AWS_REGION")
-		if source.Region == "" {
-			source.Region = os.Getenv("AWS_DEFAULT_REGION")
-		}
-		source.Endpoint = os.Getenv("AWS_ENDPOINT_URL_DYNAMODB")
-		if source.Endpoint == "" {
-			source.Endpoint = os.Getenv("AWS_ENDPOINT_URL")
+		source, dynamoConfig, err = dynamoSource(ctx, *table)
+		if err != nil {
+			return err
 		}
 	}
 	index, err := localindex.Open(ctx, *indexPath, source)
@@ -251,7 +248,7 @@ func run(args []string, analyse bool) error {
 		if *db == "sqlite" {
 			return archivesource.NewSQLite(c, source.Path)
 		}
-		return archivesource.NewDynamo(c, *table, limits)
+		return archivesource.NewDynamoFromConfig(dynamoConfig, *table, limits)
 	}
 	service := archivesync.New(ctx, index, factory, *db, limits, *syncInterval)
 	defer service.Close()

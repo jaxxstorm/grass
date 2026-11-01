@@ -62,7 +62,27 @@ func (b *Bot) RunKeywords(keywords []string) {
 					continue
 				}
 			}
-			results, err := provider.Search(keyword, lastSearchTime)
+			var results []search.SearchResult
+			if paged, ok := provider.(interface {
+				SearchPages(string, int64, func() error) ([]search.SearchResult, error)
+			}); ok && provider.Platform() == "YouTube" {
+				results, err = paged.SearchPages(keyword, lastSearchTime, func() error {
+					budget, ok := b.Storer.(interface{ ReserveYouTubePage(time.Time) (bool, error) })
+					if !ok {
+						return errors.New("storage does not support YouTube page budgeting")
+					}
+					allowed, err := budget.ReserveYouTubePage(time.Now())
+					if err != nil {
+						return err
+					}
+					if !allowed {
+						return errors.New("YouTube daily request cap reached before pagination completed")
+					}
+					return nil
+				})
+			} else {
+				results, err = provider.Search(keyword, lastSearchTime)
+			}
 			if err != nil {
 				log.Error("Error searching platform", "platform", provider.Platform(), "error", err)
 				complete = false

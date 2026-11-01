@@ -27,7 +27,10 @@ func (r SearchResult) AuthorKey() string {
 	identity := strings.TrimSpace(r.AuthorID)
 	kind := "id"
 	if identity == "" {
-		identity = strings.ToLower(strings.TrimSpace(r.AuthorHandle))
+		identity = strings.TrimSpace(r.AuthorHandle)
+		if !strings.EqualFold(r.Platform, "HackerNews") {
+			identity = strings.ToLower(identity)
+		}
 		kind = "handle"
 	}
 	if identity == "" {

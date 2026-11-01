@@ -64,6 +64,7 @@ func TestLocalHTTPWithUnavailableSource(t *testing.T) {
 		{"GET", "/api/status", 200, `"Stale":true`},
 		{"GET", "/api/archive?q=network", 200, `"Total":1`},
 		{"GET", "/api/archive?q=net", 200, `"Total":0`},
+		{"GET", "/api/archive?page=9223372036854775807&page_size=25", 400, "invalid_query"},
 		{"GET", "/api/archive?snapshot=old", 409, "snapshot_changed"},
 		{"POST", "/api/archive/reconcile", 429, "refresh_cooldown"},
 	} {

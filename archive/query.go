@@ -43,6 +43,9 @@ func ParseQuery(v url.Values) (Query, error) {
 	if q.PageSize > 100 {
 		return q, fmt.Errorf("page_size must be at most 100")
 	}
+	if q.Page-1 > int(^uint(0)>>1)/q.PageSize {
+		return q, fmt.Errorf("pagination offset is too large")
+	}
 	for _, f := range []struct {
 		name string
 		p    *time.Time

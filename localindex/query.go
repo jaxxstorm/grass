@@ -56,11 +56,19 @@ func searchWhere(q archive.Query) (string, []any, error) {
 	}
 	if !q.From.IsZero() {
 		parts = append(parts, "r.timestamp>=?")
-		args = append(args, float64(q.From.Unix())+float64(q.From.Nanosecond())/1e9)
+		bound := q.From.Unix()
+		if q.From.Nanosecond() != 0 {
+			bound++
+		}
+		args = append(args, bound)
 	}
 	if !q.To.IsZero() {
 		parts = append(parts, "r.timestamp<?")
-		args = append(args, float64(q.To.Unix())+float64(q.To.Nanosecond())/1e9)
+		bound := q.To.Unix()
+		if q.To.Nanosecond() != 0 {
+			bound++
+		}
+		args = append(args, bound)
 	}
 	return strings.Join(parts, " AND "), args, nil
 }

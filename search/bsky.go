@@ -108,12 +108,12 @@ func convertAtURLToHTTPS(atURL string) string {
 
 // Search queries Bluesky for posts matching a keyword.
 func (b *BlueskySearcher) Search(keyword string, afterEpochSecs int64) ([]SearchResult, error) {
-	// If we don't have an access token, return empty results
+	// Authentication failure must not be mistaken for a completed empty search.
 	if b.accessToken == "" {
 		log.Warn("search attempted without valid authentication",
 			"platform", "Bluesky",
 			"keyword", keyword)
-		return []SearchResult{}, nil
+		return nil, errors.New("Bluesky search requires authentication")
 	}
 
 	url := fmt.Sprintf("https://bsky.social/xrpc/app.bsky.feed.searchPosts?q=%s", keyword)
@@ -137,7 +137,7 @@ func (b *BlueskySearcher) Search(keyword string, afterEpochSecs int64) ([]Search
 			"platform", b.Platform(),
 			"keyword", keyword,
 			"retry_after", retryAfter)
-		return []SearchResult{}, nil
+		return nil, errors.New("Bluesky search rate limited")
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -145,7 +145,7 @@ func (b *BlueskySearcher) Search(keyword string, afterEpochSecs int64) ([]Search
 			"platform", b.Platform(),
 			"keyword", keyword,
 			"status_code", resp.StatusCode)
-		return []SearchResult{}, nil
+		return nil, fmt.Errorf("Bluesky search returned HTTP %d", resp.StatusCode)
 	}
 
 	var data struct {
@@ -167,7 +167,7 @@ func (b *BlueskySearcher) Search(keyword string, afterEpochSecs int64) ([]Search
 			"platform", b.Platform(),
 			"keyword", keyword,
 			"error", err)
-		return []SearchResult{}, nil
+		return nil, fmt.Errorf("decode Bluesky search: %w", err)
 	}
 
 	var results []SearchResult

@@ -15,8 +15,10 @@ import (
 )
 
 type fakeDynamo struct {
-	batchCalls   int
-	gap, missing bool
+	batchCalls    int
+	gap, missing  bool
+	identityField string
+	identityValue types.AttributeValue
 }
 
 func (f *fakeDynamo) GetItem(context.Context, *dynamodb.GetItemInput, ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
@@ -53,6 +55,12 @@ func (f *fakeDynamo) BatchGetItem(_ context.Context, in *dynamodb.BatchGetItemIn
 	}
 	item := key("X", "https://example.test")
 	item["Timestamp"] = &types.AttributeValueMemberN{Value: "1"}
+	item["JournalEpoch"] = &types.AttributeValueMemberS{Value: "epoch"}
+	item["JournalSequence"] = &types.AttributeValueMemberN{Value: "1"}
+	item["JournalWriteID"] = &types.AttributeValueMemberS{Value: "write"}
+	if f.identityField != "" {
+		item[f.identityField] = f.identityValue
+	}
 	if f.missing {
 		return &dynamodb.BatchGetItemOutput{}, nil
 	}

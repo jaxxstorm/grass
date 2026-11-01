@@ -3,6 +3,7 @@ package search
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"net/http"
@@ -33,8 +34,7 @@ func NewFediverseSearcher() (*FediverseSearcher, error) {
 		instanceURL = strings.TrimSpace(instanceURL)
 		token, err := getAccessTokenForInstance(instanceURL)
 		if err != nil {
-			log.Printf("Error obtaining access token for instance %s: %v", instanceURL, err)
-			continue
+			return nil, fmt.Errorf("authenticate instance %s: %w", instanceURL, err)
 		}
 		instanceURLs[instanceURL] = token
 	}
@@ -104,6 +104,7 @@ func cleanHTMLContent(content string) string {
 // Search performs a search for posts matching `@tailscale` or `#tailscale` on each specified instance.
 func (f *FediverseSearcher) Search(keyword string, afterEpochSecs int64) ([]SearchResult, error) {
 	var allResults []SearchResult
+	var failures []error
 
 	for instanceURL, accessToken := range f.instanceURLs {
 		searchURL := fmt.Sprintf("%s/api/v2/search?q=%s&resolve=true", instanceURL, url.QueryEscape(keyword))
@@ -112,6 +113,7 @@ func (f *FediverseSearcher) Search(keyword string, afterEpochSecs int64) ([]Sear
 		req, err := http.NewRequest("GET", searchURL, nil)
 		if err != nil {
 			log.Printf("Failed to create search request for instance %s: %v", instanceURL, err)
+			failures = append(failures, fmt.Errorf("instance %s: %w", instanceURL, err))
 			continue
 		}
 		req.Header.Set("Authorization", "Bearer "+accessToken)
@@ -121,12 +123,13 @@ func (f *FediverseSearcher) Search(keyword string, afterEpochSecs int64) ([]Sear
 		resp, err := client.Do(req)
 		if err != nil {
 			log.Printf("Failed to perform search request on instance %s: %v", instanceURL, err)
+			failures = append(failures, fmt.Errorf("instance %s: %w", instanceURL, err))
 			continue
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			log.Printf("Search request failed on instance %s with status code: %d", instanceURL, resp.StatusCode)
+			failures = append(failures, fmt.Errorf("instance %s: HTTP %d", instanceURL, resp.StatusCode))
 			continue
 		}
 
@@ -145,6 +148,7 @@ func (f *FediverseSearcher) Search(keyword string, afterEpochSecs int64) ([]Sear
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 			log.Printf("Failed to parse search results from instance %s: %v", instanceURL, err)
+			failures = append(failures, fmt.Errorf("instance %s: %w", instanceURL, err))
 			continue
 		}
 
@@ -186,5 +190,5 @@ func (f *FediverseSearcher) Search(keyword string, afterEpochSecs int64) ([]Sear
 		}
 	}
 
-	return allResults, nil
+	return allResults, errors.Join(failures...)
 }
